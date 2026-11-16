@@ -1,0 +1,1 @@
+"""YanTu ZhiXue backend application."""
