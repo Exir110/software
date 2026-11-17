@@ -23,8 +23,53 @@ def next_exam_date(today: date) -> date:
     return candidate
 
 
+DEMO_DAILY_TASKS: tuple[tuple[str, str, str, str, int, str, str], ...] = (
+    ("定积分的几何意义", "数学", "定积分", "08:30", 45, "高", "完成例题 1-8，整理换元积分步骤"),
+    ("英语长难句精读", "英语", "长难句分析", "10:00", 35, "中", "精读真题 2019 Text 2"),
+    ("操作系统进程同步", "408", "进程同步", "14:00", 50, "高", "完成信号量与管程对比"),
+    ("线性代数错题回炉", "数学", "矩阵秩", "16:00", 40, "高", "回顾秩与线性方程组判定"),
+    ("政治选择题训练", "政治", "唯物辩证法", "19:30", 30, "低", "完成肖 1000 第 4 章"),
+)
+
+
+def _ensure_demo_today(db: Session, user: User) -> None:
+    """Demo 用户跨天启动时，补一套当天的任务，避免“今日任务”为空。"""
+    today = date.today()
+    existing = db.scalar(
+        select(StudyTask.id)
+        .where(StudyTask.user_id == user.id, StudyTask.scheduled_date == today)
+        .limit(1)
+    )
+    if existing is not None:
+        return
+    subjects = {item.name: item for item in db.scalars(select(Subject)).all()}
+    points = {item.name: item for item in db.scalars(select(KnowledgePoint)).all()}
+    for title, subject_name, point_name, start_time, duration, priority, note in DEMO_DAILY_TASKS:
+        subject = subjects.get(subject_name)
+        point = points.get(point_name)
+        if subject is None or point is None:
+            continue
+        db.add(
+            StudyTask(
+                user_id=user.id,
+                subject_id=subject.id,
+                knowledge_point_id=point.id,
+                title=title,
+                scheduled_date=today,
+                start_time=start_time,
+                duration_minutes=duration,
+                status="待开始",
+                priority=priority,
+                note=note,
+            )
+        )
+    db.commit()
+
+
 def seed_demo(db: Session) -> bool:
-    if db.scalar(select(User).where(User.username == "demo")) is not None:
+    existing_user = db.scalar(select(User).where(User.username == "demo"))
+    if existing_user is not None:
+        _ensure_demo_today(db, existing_user)
         return False
 
     today = date.today()
@@ -183,3 +228,4 @@ def seed_demo(db: Session) -> bool:
 
     db.commit()
     return True
+

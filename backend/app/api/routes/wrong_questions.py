@@ -107,3 +107,14 @@ async def analyze(
         suggestions=suggestions,
         provider=provider,
     )
+
+
+@router.delete("/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_question(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    question = _get_question(db, user.id, question_id)
+    db.delete(question)
+    db.commit()

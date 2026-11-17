@@ -102,6 +102,12 @@ def update_task(
 ) -> TaskOut:
     task = _get_task(db, user.id, task_id)
     updates = payload.model_dump(exclude_unset=True)
+    if "subject_id" in updates or "knowledge_point_id" in updates:
+        _validate_reference(
+            db,
+            updates.get("subject_id", task.subject_id),
+            updates.get("knowledge_point_id", task.knowledge_point_id),
+        )
     for field, value in updates.items():
         setattr(task, field, value)
     if updates.get("status") == "已完成" and task.completed_at is None:
@@ -109,6 +115,7 @@ def update_task(
     if updates.get("status") in {"待开始", "进行中"}:
         task.completed_at = None
     db.commit()
+    db.expire_all()
     task = _get_task(db, user.id, task_id)
     states = state_map(db, user.id)
     return TaskOut(**task_dict(task, states.get(task.knowledge_point_id or -1)))
@@ -193,3 +200,5 @@ def delete_task(
         record.task_id = None
     db.delete(task)
     db.commit()
+
+

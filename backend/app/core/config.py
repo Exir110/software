@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(BASE_DIR / 'data' / 'app.db').as_posix()}"
     secret_key: str = "dev-only-secret-change-me-before-deploy-32"
     access_token_expire_minutes: int = 60 * 24 * 7
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,http://127.0.0.1:4173"
     ai_provider: str = "local"
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
@@ -30,3 +30,4 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+

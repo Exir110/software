@@ -33,6 +33,7 @@ class User(Base):
     knowledge_states: Mapped[list["UserKnowledge"]] = relationship(back_populates="user")
     records: Mapped[list["StudyRecord"]] = relationship(back_populates="user")
     wrong_questions: Mapped[list["WrongQuestion"]] = relationship(back_populates="user")
+    weekly_goals: Mapped[list["WeeklyGoal"]] = relationship(back_populates="user")
 
 
 class ExamGoal(Base):
@@ -182,3 +183,17 @@ class AIRecommendation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_local)
 
     user: Mapped["User"] = relationship()
+
+
+class WeeklyGoal(Base):
+    __tablename__ = "weekly_goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    week_start: Mapped[date] = mapped_column(Date, index=True)
+    title: Mapped[str] = mapped_column(String(128))
+    target_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    status: Mapped[str] = mapped_column(String(16), default="待开始", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_local)
+
+    user: Mapped["User"] = relationship(back_populates="weekly_goals")

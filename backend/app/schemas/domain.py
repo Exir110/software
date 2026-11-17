@@ -101,6 +101,8 @@ class TaskCreate(BaseModel):
 
 class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=128)
+    subject_id: int | None = None
+    knowledge_point_id: int | None = None
     status: TaskStatus | None = None
     priority: Priority | None = None
     note: str | None = Field(default=None, max_length=1000)
@@ -236,3 +238,50 @@ class SummaryOut(BaseModel):
     summary: str
     provider: str
     generated_at: datetime
+
+
+class WeeklyGoalOut(BaseModel):
+    id: int
+    title: str
+    target_minutes: int
+    status: Literal["待开始", "进行中", "已完成"]
+    week_start: date
+
+
+class WeeklyGoalCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=128)
+    target_minutes: int = Field(default=60, ge=10, le=1200)
+
+
+class WeeklyGoalUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=128)
+    target_minutes: int | None = Field(default=None, ge=10, le=1200)
+    status: Literal["待开始", "进行中", "已完成"] | None = None
+
+
+class PlanPhaseOut(BaseModel):
+    index: int
+    name: str
+    start: date
+    end: date
+    status: Literal["done", "current", "upcoming"]
+
+
+class PlanWeekOut(BaseModel):
+    start: date
+    end: date
+    total_tasks: int
+    completed_tasks: int
+    completion_rate: int
+    minutes: int
+    avg_daily_tasks: float
+    delta_week: int | None = None
+    goals: list[WeeklyGoalOut]
+
+
+class PlanOut(BaseModel):
+    exam_date: date | None
+    days_remaining: int
+    phases: list[PlanPhaseOut]
+    week: PlanWeekOut
+    insight: str

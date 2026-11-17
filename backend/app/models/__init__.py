@@ -7,6 +7,7 @@ from .entities import (
     Subject,
     User,
     UserKnowledge,
+    WeeklyGoal,
     WrongQuestion,
 )
 
@@ -19,5 +20,6 @@ __all__ = [
     "Subject",
     "User",
     "UserKnowledge",
+    "WeeklyGoal",
     "WrongQuestion",
 ]
