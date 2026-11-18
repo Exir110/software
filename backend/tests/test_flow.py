@@ -72,6 +72,7 @@ def test_task_patch_and_start(client: TestClient, demo_headers: dict[str, str]):
             "title": "待修改任务",
             "subject_id": point["subject_id"],
             "knowledge_point_id": point["id"],
+            "start_time": "11:00",
         },
     )
     assert created.status_code == 201, created.text
@@ -108,3 +109,4 @@ def test_ai_plan_and_wrong_analysis(client: TestClient, demo_headers: dict[str, 
     assert analysis.status_code == 200, analysis.text
     assert analysis.json()["suggestions"]
     assert analysis.json()["provider"] in {"local", "openai"}
+

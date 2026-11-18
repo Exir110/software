@@ -4,9 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ...core.clock import today_local
+from ...core.config import settings
 from ...db.session import get_db
 from ...models import (
     ExamGoal,
+    PlanSeed,
     StudyRecord,
     StudyTask,
     User,
@@ -22,6 +25,8 @@ from ...schemas.domain import (
     WeeklyGoalOut,
     WeeklyGoalUpdate,
 )
+from ...services.ai import effective_provider
+from ...services.goals import goal_progress, sync_weekly_goals, week_bounds
 from ..deps import get_current_user
 
 router = APIRouter(prefix="/plan", tags=["备考计划"])
@@ -32,11 +37,6 @@ PHASE_OFFSETS: tuple[tuple[str, int, int], ...] = (
     ("冲刺阶段", 48, 19),
     ("模考阶段", 18, 1),
 )
-
-
-def week_bounds(day: date) -> tuple[date, date]:
-    start = day - timedelta(days=day.weekday())
-    return start, start + timedelta(days=6)
 
 
 def build_phases(exam_date: date | None, today: date) -> list[PlanPhaseOut]:
@@ -58,13 +58,17 @@ def build_phases(exam_date: date | None, today: date) -> list[PlanPhaseOut]:
     return phases
 
 
-def _goal_out(goal: WeeklyGoal) -> WeeklyGoalOut:
+def _goal_out(db: Session, user_id: int, goal: WeeklyGoal) -> WeeklyGoalOut:
+    pct, text, auto = goal_progress(db, user_id, goal)
     return WeeklyGoalOut(
         id=goal.id,
         title=goal.title,
         target_minutes=goal.target_minutes,
         status=goal.status,
         week_start=goal.week_start,
+        progress=pct,
+        progress_text=text,
+        auto=auto,
     )
 
 
@@ -90,7 +94,16 @@ def _ensure_goals(
             .order_by(WeeklyGoal.id)
         ).all()
     )
+    seeded = db.scalar(
+        select(PlanSeed).where(PlanSeed.user_id == user_id, PlanSeed.week_start == week_start)
+    )
+    if seeded is not None:
+        return goals
+
+    # 本周已有用户自建目标：只记录“已初始化”，不再补默认目标
     if goals:
+        db.add(PlanSeed(user_id=user_id, week_start=week_start))
+        db.commit()
         return goals
 
     states = list(
@@ -135,15 +148,14 @@ def _ensure_goals(
         )
         db.add(goal)
         created.append(goal)
+    db.add(PlanSeed(user_id=user_id, week_start=week_start))
     db.commit()
     for goal in created:
         db.refresh(goal)
     return created
 
 
-def _build_week(
-    db: Session, user_id: int, today: date
-) -> tuple[PlanWeekOut, str]:
+def _build_week(db: Session, user_id: int, today: date) -> tuple[PlanWeekOut, str]:
     start, end = week_bounds(today)
     tasks = _week_tasks(db, user_id, start, end)
     completed = sum(1 for task in tasks if task.status == "已完成")
@@ -181,6 +193,14 @@ def _build_week(
     delta = round((completed - prev_done) / prev_done * 100) if prev_done else None
 
     goals = _ensure_goals(db, user_id, start, tasks)
+    sync_weekly_goals(db, user_id)
+    goals = list(
+        db.scalars(
+            select(WeeklyGoal)
+            .where(WeeklyGoal.user_id == user_id, WeeklyGoal.week_start == start)
+            .order_by(WeeklyGoal.id)
+        ).all()
+    )
     week = PlanWeekOut(
         start=start,
         end=end,
@@ -190,7 +210,7 @@ def _build_week(
         minutes=int(record_minutes),
         avg_daily_tasks=avg_daily,
         delta_week=delta,
-        goals=[_goal_out(goal) for goal in goals],
+        goals=[_goal_out(db, user_id, goal) for goal in goals],
     )
 
     if total == 0:
@@ -211,12 +231,17 @@ def _build_week(
 def get_plan(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> PlanOut:
-    today = date.today()
+    today = today_local()
     goal = db.query(ExamGoal).filter(ExamGoal.user_id == user.id).first()
     week, insight = _build_week(db, user.id, today)
     return PlanOut(
         exam_date=goal.exam_date if goal else None,
         days_remaining=max((goal.exam_date - today).days, 0) if goal else 0,
+        target_school=goal.target_school if goal else "",
+        target_major=goal.target_major if goal else "",
+        target_score=goal.target_score if goal else 380,
+        daily_minutes=goal.daily_minutes if goal else 180,
+        ai_provider=effective_provider(),
         phases=build_phases(goal.exam_date if goal else None, today),
         week=week,
         insight=insight,
@@ -229,7 +254,7 @@ def create_goal(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> WeeklyGoalOut:
-    start, _ = week_bounds(date.today())
+    start, _ = week_bounds(today_local())
     goal = WeeklyGoal(
         user_id=user.id,
         week_start=start,
@@ -240,7 +265,7 @@ def create_goal(
     db.add(goal)
     db.commit()
     db.refresh(goal)
-    return _goal_out(goal)
+    return _goal_out(db, user.id, goal)
 
 
 def _get_goal(db: Session, user_id: int, goal_id: int) -> WeeklyGoal:
@@ -264,7 +289,7 @@ def update_goal(
         setattr(goal, field, value)
     db.commit()
     db.refresh(goal)
-    return _goal_out(goal)
+    return _goal_out(db, user.id, goal)
 
 
 @router.delete("/goals/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)

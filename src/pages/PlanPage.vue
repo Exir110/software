@@ -4,12 +4,15 @@ import { request } from '../api/client'
 import type { Plan, PlanResponse, WeeklyGoal } from '../api/types'
 import { notify } from '../stores/toast'
 import { fmtShortDate } from '../utils'
+import AiPlanDialog from '../components/AiPlanDialog.vue'
 
 const plan = ref<Plan | null>(null)
 const loading = ref(true)
 const loadError = ref('')
 const aiBusy = ref(false)
 const aiMessage = ref('')
+const planPreview = ref<PlanResponse | null>(null)
+const planApplying = ref(false)
 const showGoalForm = ref(false)
 const newGoal = reactive({ title: '', target_minutes: 60 })
 const savingGoal = ref(false)
@@ -51,14 +54,26 @@ function range(start: string, end: string): string {
 async function optimize(): Promise<void> {
   aiBusy.value = true
   try {
-    const result = await request<PlanResponse>('/ai/plan', { method: 'POST' })
-    aiMessage.value = result.message
-    notify('AI 已重新计算任务优先级与时间')
-    await load()
+    planPreview.value = await request<PlanResponse>('/ai/plan?apply=false', { method: 'POST' })
   } catch (error) {
     notify((error as Error).message, 'error')
   } finally {
     aiBusy.value = false
+  }
+}
+
+async function applyPlan(): Promise<void> {
+  planApplying.value = true
+  try {
+    const result = await request<PlanResponse>('/ai/plan?apply=true', { method: 'POST' })
+    aiMessage.value = result.message
+    planPreview.value = null
+    notify('已应用 AI 计划')
+    await load()
+  } catch (error) {
+    notify((error as Error).message, 'error')
+  } finally {
+    planApplying.value = false
   }
 }
 
@@ -119,7 +134,7 @@ async function removeGoal(goal: WeeklyGoal): Promise<void> {
         <p>从现在到上岸，每一个阶段都看得见。</p>
       </div>
       <button class="primary-button" type="button" :disabled="aiBusy" @click="optimize">
-        <span>✦</span> {{ aiBusy ? '正在重排…' : 'AI 优化计划' }}
+        <span>✦</span> {{ aiBusy ? '正在分析…' : '预览 AI 计划' }}
       </button>
     </section>
 
@@ -133,11 +148,11 @@ async function removeGoal(goal: WeeklyGoal): Promise<void> {
         <div class="timeline-header">
           <div>
             <span class="eyebrow">{{ plan.exam_date ? `${plan.exam_date.slice(0, 4)} 考研` : '备考计划' }}</span>
-            <h2>数学一 · 英语一 · 政治 · 408</h2>
+            <h2>{{ plan.target_school || plan.target_major ? `${plan.target_school || '目标院校'} · ${plan.target_major || '目标专业'}` : '我的备考计划' }}</h2>
           </div>
           <span class="goal-date">
             {{ plan.exam_date ? `考试日 ${plan.exam_date.split('-').join('.')}` : '尚未设置考试日期' }}
-            · 剩余 {{ plan.days_remaining }} 天
+            · 剩余 {{ plan.days_remaining }} 天 · 目标 {{ plan.target_score }} 分 · 每日 {{ plan.daily_minutes }} 分钟
           </span>
         </div>
         <div v-if="phases.length" class="timeline-track">
@@ -172,7 +187,11 @@ async function removeGoal(goal: WeeklyGoal): Promise<void> {
               >{{ goal.status === '已完成' ? '✓' : '' }}</button>
               <div class="goal-copy">
                 <strong>{{ goal.title }}</strong>
-                <small>预计 {{ Math.round(goal.target_minutes / 6) / 10 }} 小时 · {{ goal.status }}</small>
+                <small>
+                  预计 {{ Math.round(goal.target_minutes / 6) / 10 }} 小时 · {{ goal.status }}
+                  <template v-if="goal.progress_text"> · {{ goal.progress_text }}</template>
+                  <span v-if="goal.auto" class="auto-tag">自动</span>
+                </small>
               </div>
               <button class="goal-remove" type="button" title="删除目标" @click="removeGoal(goal)">×</button>
             </div>
@@ -195,6 +214,7 @@ async function removeGoal(goal: WeeklyGoal): Promise<void> {
           </div>
           <div class="big-insight" v-else>{{ week?.avg_daily_tasks ?? 0 }}<span>个/学习日</span></div>
           <p>{{ aiMessage || plan.insight }}</p>
+          <p class="ai-mode-line">生成方式：{{ plan.ai_provider === 'openai' ? '大模型' : '本地规则' }}</p>
           <div class="plan-mini-stats">
             <span>本周任务 <b>{{ week?.completed_tasks }} / {{ week?.total_tasks }}</b></span>
             <span>学习时长 <b>{{ ((week?.minutes ?? 0) / 60).toFixed(1) }}h</b></span>
@@ -203,6 +223,14 @@ async function removeGoal(goal: WeeklyGoal): Promise<void> {
         </article>
       </section>
     </template>
+
+    <AiPlanDialog
+      v-if="planPreview"
+      :result="planPreview"
+      :applying="planApplying"
+      @close="planPreview = null"
+      @apply="applyPlan"
+    />
   </div>
 </template>
 

@@ -1,8 +1,7 @@
-from datetime import date
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from ...core.clock import today_local
 from ...db.session import get_db
 from ...models import ExamGoal, User
 from ...schemas.domain import GoalIn, GoalOut
@@ -18,7 +17,7 @@ def _goal_out(goal: ExamGoal) -> GoalOut:
         target_major=goal.target_major,
         target_score=goal.target_score,
         daily_minutes=goal.daily_minutes,
-        days_remaining=max((goal.exam_date - date.today()).days, 0),
+        days_remaining=max((goal.exam_date - today_local()).days, 0),
     )
 
 
@@ -38,6 +37,8 @@ def upsert_goal(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> GoalOut:
+    if payload.exam_date < today_local():
+        raise HTTPException(status_code=400, detail="考试日期不能早于今天")
     goal = db.query(ExamGoal).filter(ExamGoal.user_id == user.id).first()
     if goal is None:
         goal = ExamGoal(user_id=user.id, **payload.model_dump())

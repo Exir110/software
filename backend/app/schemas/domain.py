@@ -61,6 +61,14 @@ class KnowledgeOut(BaseModel):
     last_practiced_at: datetime | None = None
 
 
+class KnowledgeCreate(BaseModel):
+    subject_id: int
+    name: str = Field(min_length=1, max_length=64)
+    chapter: str = Field(default="", max_length=64)
+    importance: int = Field(default=3, ge=1, le=5)
+    difficulty: int = Field(default=3, ge=1, le=5)
+
+
 class TaskOut(BaseModel):
     id: int
     title: str
@@ -181,6 +189,7 @@ class WrongQuestionOut(BaseModel):
     status: str
     review_count: int
     next_review_at: datetime | None = None
+    due: bool = False
     created_at: datetime
 
 
@@ -199,6 +208,8 @@ class WeeklyPoint(BaseModel):
 class DashboardOut(BaseModel):
     days_to_exam: int
     study_goal_minutes: int
+    overdue_count: int = 0
+    ai_provider: str = "local"
     today_minutes: int
     today_completed: int
     today_total: int
@@ -217,6 +228,7 @@ class PlanRecommendation(BaseModel):
     score: float
     reason: str
     start_time: str
+    duration_minutes: int = 0
 
 
 class PlanResponse(BaseModel):
@@ -225,6 +237,8 @@ class PlanResponse(BaseModel):
     provider: str
     applied: bool
     recommendations: list[PlanRecommendation]
+    deferred: list[PlanRecommendation] = []
+    warnings: list[str] = []
 
 
 class WrongAnalysisOut(BaseModel):
@@ -246,6 +260,9 @@ class WeeklyGoalOut(BaseModel):
     target_minutes: int
     status: Literal["待开始", "进行中", "已完成"]
     week_start: date
+    progress: int = 0
+    progress_text: str = ""
+    auto: bool = False
 
 
 class WeeklyGoalCreate(BaseModel):
@@ -282,6 +299,26 @@ class PlanWeekOut(BaseModel):
 class PlanOut(BaseModel):
     exam_date: date | None
     days_remaining: int
+    target_school: str = ""
+    target_major: str = ""
+    target_score: int = 380
+    daily_minutes: int = 180
+    ai_provider: str = "local"
     phases: list[PlanPhaseOut]
     week: PlanWeekOut
     insight: str
+
+
+class StudyRecordOut(BaseModel):
+    id: int
+    task_id: int | None = None
+    task_title: str | None = None
+    knowledge_point: str | None = None
+    subject: str | None = None
+    minutes: int
+    correct_count: int
+    total_count: int
+    self_rating: int
+    mastery_delta: float | None = None
+    note: str
+    created_at: datetime

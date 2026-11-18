@@ -33,9 +33,14 @@ async function load(): Promise<void> {
 onMounted(load)
 
 const subjects = computed(() => [...new Set(questions.value.map((item) => item.subject))])
+const dueCount = computed(() => questions.value.filter((item) => item.due).length)
 const filtered = computed(() =>
   questions.value.filter((item) => {
-    if (statusFilter.value !== '全部' && item.status !== statusFilter.value) return false
+    if (statusFilter.value === '今日到期') {
+      if (!item.due) return false
+    } else if (statusFilter.value !== '全部' && item.status !== statusFilter.value) {
+      return false
+    }
     if (subjectFilter.value !== '全部' && item.subject !== subjectFilter.value) return false
     return true
   }),
@@ -74,6 +79,18 @@ async function analyze(question: WrongQuestion): Promise<void> {
     notify((error as Error).message, 'error')
   } finally {
     analyzing.value = null
+  }
+}
+
+async function review(question: WrongQuestion): Promise<void> {
+  try {
+    const updated = await request<WrongQuestion>(`/wrong-questions/${question.id}/review`, {
+      method: 'POST',
+    })
+    Object.assign(question, updated)
+    notify(`已记录复习，下次复习：${fmtDate(updated.next_review_at)}`)
+  } catch (error) {
+    notify((error as Error).message, 'error')
   }
 }
 
@@ -123,7 +140,7 @@ async function remove(question: WrongQuestion): Promise<void> {
       <section class="filter-bar">
         <div class="segmented">
           <button
-            v-for="item in ['全部', '待复习', '已掌握']"
+            v-for="item in ['全部', '今日到期', '待复习', '已掌握']"
             :key="item"
             :class="{ active: statusFilter === item }"
             type="button"
@@ -134,7 +151,7 @@ async function remove(question: WrongQuestion): Promise<void> {
           <option>全部</option>
           <option v-for="subject in subjects" :key="subject">{{ subject }}</option>
         </select>
-        <span class="filter-summary">{{ filtered.length }} 道错题</span>
+        <span class="filter-summary">{{ filtered.length }} 道错题 · {{ dueCount }} 道今日到期</span>
       </section>
 
       <section class="wrong-layout">
@@ -151,12 +168,16 @@ async function remove(question: WrongQuestion): Promise<void> {
               <div class="task-title-line">
                 <strong>{{ question.title }}</strong>
                 <span class="tag" :class="question.status === '已掌握' ? 'tag-green' : 'tag-yellow'">{{ question.status }}</span>
+                <span v-if="question.due" class="tag tag-red">今日到期</span>
               </div>
               <span>
                 {{ question.subject }}
                 <template v-if="question.knowledge_point"> · {{ question.knowledge_point }}</template>
                 <template v-if="question.error_type"> · {{ question.error_type }}</template>
                 <template v-if="question.source"> · {{ question.source }}</template>
+              </span>
+              <span class="review-meta">
+                已复习 {{ question.review_count }} 次 · 下次复习 {{ fmtDate(question.next_review_at) }}
               </span>
               <p v-if="question.analysis" class="analysis-preview">{{ question.analysis }}</p>
             </div>
@@ -165,6 +186,7 @@ async function remove(question: WrongQuestion): Promise<void> {
               <button class="outline-button" type="button" :disabled="analyzing === question.id" @click="analyze(question)">
                 {{ analyzing === question.id ? '分析中…' : 'AI 分析' }}
               </button>
+              <button class="outline-button" type="button" @click="review(question)">复习完成</button>
               <button class="outline-button" type="button" @click="toggleStatus(question)">
                 {{ question.status === '已掌握' ? '待复习' : '已掌握' }}
               </button>

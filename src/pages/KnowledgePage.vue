@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { request } from '../api/client'
-import type { Knowledge, PracticeResult } from '../api/types'
+import type { Knowledge, PracticeResult, StudyRecordItem } from '../api/types'
 import { meta, loadMeta } from '../stores/meta'
 import { notify } from '../stores/toast'
-import { fmtDate } from '../utils'
+import { fmtDate, fmtDateTime } from '../utils'
+import KnowledgePointDialog from '../components/KnowledgePointDialog.vue'
 import PracticeDialog from '../components/PracticeDialog.vue'
 
 const knowledge = ref<Knowledge[]>([])
+const records = ref<StudyRecordItem[]>([])
+const showPointDialog = ref(false)
+const recordDeleting = ref<number | null>(null)
 const loading = ref(true)
 const loadError = ref('')
 const selectedSubject = ref(0)
@@ -19,7 +23,12 @@ async function load(): Promise<void> {
   loadError.value = ''
   try {
     await loadMeta()
-    knowledge.value = await request<Knowledge[]>('/knowledge')
+    const [points, log] = await Promise.all([
+      request<Knowledge[]>('/knowledge'),
+      request<StudyRecordItem[]>('/records?limit=20'),
+    ])
+    knowledge.value = points
+    records.value = log
   } catch (error) {
     loadError.value = (error as Error).message
   } finally {
@@ -59,10 +68,29 @@ async function refresh(): Promise<void> {
   notify('知识数据已刷新')
 }
 
+async function loadRecords(): Promise<void> {
+  records.value = await request<StudyRecordItem[]>('/records?limit=20')
+}
+
 function onSaved(result: PracticeResult): void {
   const index = knowledge.value.findIndex((item) => item.id === result.knowledge.id)
   if (index >= 0) knowledge.value[index] = result.knowledge
   knowledge.value = [...knowledge.value].sort((a, b) => a.mastery - b.mastery)
+  void loadRecords()
+}
+
+async function removeRecord(record: StudyRecordItem): Promise<void> {
+  if (!window.confirm('删除这条学习记录？对应的掌握度变化会回滚，关联任务会恢复为待开始。')) return
+  recordDeleting.value = record.id
+  try {
+    await request<void>(`/records/${record.id}`, { method: 'DELETE' })
+    notify('学习记录已删除，掌握度已回滚')
+    await load()
+  } catch (error) {
+    notify((error as Error).message, 'error')
+  } finally {
+    recordDeleting.value = null
+  }
 }
 </script>
 
@@ -74,7 +102,10 @@ function onSaved(result: PracticeResult): void {
         <h1>知识追踪</h1>
         <p>掌握度会随着你的练习和复习动态更新。</p>
       </div>
-      <button class="outline-button" type="button" @click="refresh">↻ 刷新数据</button>
+      <div class="title-actions">
+        <button class="outline-button" type="button" @click="showPointDialog = true">＋ 添加知识点</button>
+        <button class="outline-button" type="button" @click="refresh">↻ 刷新数据</button>
+      </div>
     </section>
 
     <div v-if="loading" class="loading-state">正在加载知识点…</div>
@@ -136,6 +167,34 @@ function onSaved(result: PracticeResult): void {
         </article>
       </section>
       <div v-if="!filtered.length" class="empty-state">该科目下还没有知识点。</div>
+
+      <section class="panel records-panel">
+        <div class="panel-heading">
+          <div><p class="overline">Study log</p><h2>最近学习记录</h2></div>
+          <span class="panel-caption">删除记录会回滚对应掌握度</span>
+        </div>
+        <div v-for="record in records" :key="record.id" class="record-row">
+          <div class="record-main">
+            <strong>{{ record.task_title || record.knowledge_point || '学习记录' }}</strong>
+            <span>
+              {{ fmtDateTime(record.created_at) }} · {{ record.minutes }} 分钟
+              <template v-if="record.total_count"> · {{ record.correct_count }}/{{ record.total_count }}</template>
+              · 自评 {{ record.self_rating }}/5
+            </span>
+            <p v-if="record.note">{{ record.note }}</p>
+          </div>
+          <span class="record-delta" :class="{ down: (record.mastery_delta ?? 0) < 0 }">
+            {{ record.mastery_delta === null ? '—' : `${record.mastery_delta > 0 ? '+' : ''}${record.mastery_delta.toFixed(1)}%` }}
+          </span>
+          <button
+            class="outline-button danger-button"
+            type="button"
+            :disabled="recordDeleting === record.id"
+            @click="removeRecord(record)"
+          >删除</button>
+        </div>
+        <div v-if="!records.length" class="empty-state">还没有学习记录。</div>
+      </section>
     </template>
 
     <PracticeDialog
@@ -143,6 +202,11 @@ function onSaved(result: PracticeResult): void {
       :point="practicing"
       @close="practicing = null"
       @saved="onSaved"
+    />
+    <KnowledgePointDialog
+      v-if="showPointDialog"
+      @close="showPointDialog = false"
+      @saved="load"
     />
   </div>
 </template>

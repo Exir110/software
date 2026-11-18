@@ -79,6 +79,15 @@ async function save(): Promise<void> {
     notify('请选择科目', 'error')
     return
   }
+  if (form.scheduled_date < todayISO()) {
+    notify('不能把任务安排在过去的日期', 'error')
+    return
+  }
+  const [hours, minutes] = form.start_time.split(':').map(Number)
+  if (hours * 60 + minutes + form.duration_minutes > 24 * 60) {
+    notify('任务结束时间不能超过当天 24:00', 'error')
+    return
+  }
   saving.value = true
   try {
     let saved: Task
@@ -137,7 +146,7 @@ async function save(): Promise<void> {
         </label>
       </div>
       <div class="form-row">
-        <label>日期<input v-model="form.scheduled_date" type="date"></label>
+        <label>日期<input v-model="form.scheduled_date" type="date" :min="todayISO()"></label>
         <label>开始时间<input v-model="form.start_time" type="time"></label>
       </div>
       <div class="form-row">
@@ -150,6 +159,9 @@ async function save(): Promise<void> {
           </select>
         </label>
       </div>
+      <p v-if="!form.knowledge_point_id" class="field-hint">
+        未关联知识点的任务完成后只记录学习时长，不会更新掌握度。
+      </p>
       <label>备注<textarea v-model="form.note" rows="2" maxlength="1000" placeholder="可选：本次学习要完成的内容"></textarea></label>
       <button class="primary-button full-button" type="button" :disabled="saving" @click="save">
         {{ saving ? '正在保存…' : task ? '保存修改' : '加入计划' }}

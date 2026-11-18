@@ -8,12 +8,13 @@ from .api.router import api_router
 from .core.config import settings
 from .db.base import Base
 from .db.seed import seed_demo
-from .db.session import SessionLocal, engine
+from .db.session import SessionLocal, engine, ensure_schema
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_schema()
     if settings.seed_demo:
         with SessionLocal() as db:
             seed_demo(db)
@@ -23,7 +24,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="面向考研群体的学习规划与知识追踪系统",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -41,7 +42,7 @@ app.include_router(api_router, prefix=settings.api_prefix)
 def root() -> dict:
     return {
         "name": settings.app_name,
-        "version": "0.2.0",
+        "version": "0.3.0",
         "docs": "/docs",
         "health": "/api/health",
     }

@@ -40,13 +40,16 @@ function readHash(): string {
 const activeNav = ref(readHash())
 const showMobileNav = ref(false)
 const showGoalDialog = ref(false)
+const showNotifications = ref(false)
 const shell = reactive({
   daysToExam: 0,
   todayCompleted: 0,
   todayTotal: 0,
+  overdue: 0,
   streak: 0,
   average: 0,
 })
+const dataVersion = ref(0)
 
 const currentPage = computed<Component>(() => pages[activeNav.value] ?? OverviewPage)
 const activePageTitle = computed(
@@ -56,18 +59,28 @@ const pendingCount = computed(() => Math.max(shell.todayTotal - shell.todayCompl
 const todayRate = computed(() =>
   shell.todayTotal ? Math.round((shell.todayCompleted / shell.todayTotal) * 100) : 0,
 )
+const notifications = computed(() => {
+  const items: { title: string; desc: string; page: string }[] = []
+  if (shell.overdue) {
+    items.push({ title: `${shell.overdue} 个任务已逾期`, desc: '去任务页一键顺延', page: 'tasks' })
+  }
+  if (pendingCount.value) {
+    items.push({ title: `${pendingCount.value} 个今日任务待完成`, desc: '查看今天的任务队列', page: 'tasks' })
+  }
+  if (!items.length) {
+    items.push({ title: '今天没有待办', desc: '可以安排一次错题回顾', page: 'wrong' })
+  }
+  return items
+})
 const formattedDate = computed(() => {
   const now = new Date()
   return `${now.getMonth() + 1}月${now.getDate()}日 · ${weekdayLabel(now)}`
 })
 
 const notifyTitle = computed(() => {
+  if (shell.overdue) return `${shell.overdue} 个任务已逾期，${pendingCount.value} 个今日待完成`
   if (!shell.todayTotal) return '今天还没有任务'
   return pendingCount.value ? `还有 ${pendingCount.value} 个任务待完成` : '今日任务已完成'
-})
-const notifyMessage = computed(() => {
-  if (!shell.todayTotal) return '今天还没有任务，先添加一个学习任务吧'
-  return pendingCount.value ? `今天还有 ${pendingCount.value} 个任务待完成` : '今天的任务已经全部完成'
 })
 
 async function refreshShell(): Promise<void> {
@@ -77,11 +90,17 @@ async function refreshShell(): Promise<void> {
     shell.daysToExam = dashboard.days_to_exam
     shell.todayCompleted = dashboard.today_completed
     shell.todayTotal = dashboard.today_total
+    shell.overdue = dashboard.overdue_count
     shell.streak = dashboard.streak_days
     shell.average = dashboard.average_mastery
   } catch {
     // 页面自己会显示具体错误，这里静默失败即可
   }
+}
+
+function openNotification(page: string): void {
+  showNotifications.value = false
+  changePage(page)
 }
 
 function changePage(id: string): void {
@@ -98,6 +117,12 @@ function onHashChange(): void {
 function handleUnauthorized(): void {
   logout()
   activeNav.value = 'overview'
+  window.history.replaceState(null, '', window.location.pathname + window.location.search)
+}
+
+function onGoalSaved(): void {
+  dataVersion.value += 1
+  void refreshShell()
 }
 
 function handleLogout(): void {
@@ -134,6 +159,7 @@ onBeforeUnmount(() => {
   <LoginPage v-else-if="!session.user" />
 
   <div v-else class="app-shell">
+    <div v-if="showMobileNav" class="mobile-nav-backdrop" @click="showMobileNav = false"></div>
     <aside class="sidebar" :class="{ 'sidebar-open': showMobileNav }">
       <div class="brand">
         <div class="brand-mark">研</div>
@@ -164,7 +190,10 @@ onBeforeUnmount(() => {
         <span class="eyebrow">距离考试</span>
         <strong>{{ shell.daysToExam }}<small> 天</small></strong>
         <div class="mini-progress"><span :style="{ width: `${todayRate}%` }"></span></div>
-        <span class="muted-text">今日完成 {{ shell.todayCompleted }}/{{ shell.todayTotal }} · 掌握度 {{ shell.average }}%</span>
+        <span class="muted-text">
+          今日完成 {{ shell.todayCompleted }}/{{ shell.todayTotal }} · 掌握度 {{ shell.average }}%
+          <template v-if="shell.overdue"> · 逾期 {{ shell.overdue }}</template>
+        </span>
       </div>
 
       <div class="profile-row">
@@ -182,17 +211,33 @@ onBeforeUnmount(() => {
         <div class="breadcrumb"><span>我的空间</span><b>/</b><strong>{{ activePageTitle }}</strong></div>
         <div class="topbar-actions">
           <span class="sync-badge" title="数据已保存到后端数据库">后端数据</span>
-          <button
-            class="icon-button notification-button"
-            type="button"
-            :title="notifyTitle"
-            @click="notify(notifyMessage)"
-          >♧<i v-if="pendingCount"></i></button>
+          <div class="notification-wrap">
+            <button
+              class="icon-button notification-button"
+              type="button"
+              :title="notifyTitle"
+              @click="showNotifications = !showNotifications"
+            >♧<i v-if="pendingCount || shell.overdue"></i></button>
+            <div v-if="showNotifications" class="notification-backdrop" @click="showNotifications = false"></div>
+            <div v-if="showNotifications" class="notification-panel" @click.stop>
+              <p class="overline">Reminders</p>
+              <button
+                v-for="(item, index) in notifications"
+                :key="index"
+                class="notification-item"
+                type="button"
+                @click="openNotification(item.page)"
+              >
+                <strong>{{ item.title }}</strong>
+                <span>{{ item.desc }}</span>
+              </button>
+            </div>
+          </div>
           <button class="date-chip" type="button" @click="notify(`已连续学习 ${shell.streak} 天`)">◷ {{ formattedDate }}</button>
         </div>
       </header>
 
-      <component :is="currentPage" @navigate="changePage" />
+      <component :is="currentPage" :key="`${activeNav}-${dataVersion}`" @navigate="changePage" />
     </main>
   </div>
 
@@ -205,7 +250,8 @@ onBeforeUnmount(() => {
   <GoalDialog
     v-if="showGoalDialog"
     @close="showGoalDialog = false"
-    @saved="refreshShell"
+    @saved="onGoalSaved"
   />
 </template>
+
 

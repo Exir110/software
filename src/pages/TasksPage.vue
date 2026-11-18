@@ -9,6 +9,8 @@ import CompleteTaskDialog from '../components/CompleteTaskDialog.vue'
 import TaskDialog from '../components/TaskDialog.vue'
 
 const tasks = ref<Task[]>([])
+const overdue = ref<Task[]>([])
+const carrying = ref(false)
 const loading = ref(true)
 const loadError = ref('')
 const taskFilter = ref<'全部' | TaskStatus>('全部')
@@ -23,7 +25,12 @@ async function load(): Promise<void> {
   loadError.value = ''
   try {
     await loadMeta()
-    tasks.value = await request<Task[]>(`/tasks?date=${selectedDate.value}`)
+    const [list, overdueList] = await Promise.all([
+      request<Task[]>(`/tasks?date=${selectedDate.value}`),
+      request<Task[]>('/tasks/overdue'),
+    ])
+    tasks.value = list
+    overdue.value = overdueList
   } catch (error) {
     loadError.value = (error as Error).message
   } finally {
@@ -106,6 +113,19 @@ async function onCompleted(_result: TaskCompleteResult): Promise<void> {
 async function onDateChange(): Promise<void> {
   await load()
 }
+
+async function carryOver(): Promise<void> {
+  carrying.value = true
+  try {
+    const moved = await request<Task[]>('/tasks/carry-over', { method: 'POST' })
+    notify(moved.length ? `已顺延 ${moved.length} 个任务到今天` : '没有可顺延的任务')
+    await load()
+  } catch (error) {
+    notify((error as Error).message, 'error')
+  } finally {
+    carrying.value = false
+  }
+}
 </script>
 
 <template>
@@ -134,7 +154,17 @@ async function onDateChange(): Promise<void> {
         <option v-for="subject in meta.subjects" :key="subject.id" :value="subject.id">{{ subject.name }}</option>
       </select>
       <input v-model="selectedDate" class="date-filter" type="date" aria-label="选择日期" @change="onDateChange">
-      <span class="filter-summary">{{ filteredTasks.length }} 个任务 · 预计 {{ totalMinutes }} 分钟</span>
+      <span class="filter-summary">{{ filteredTasks.length }} 个任务 · 待完成预计 {{ totalMinutes }} 分钟</span>
+    </section>
+
+    <section v-if="overdue.length" class="overdue-banner">
+      <div>
+        <strong>{{ overdue.length }} 个任务已逾期</strong>
+        <span>最早的是「{{ overdue[0].title }}」（{{ overdue[0].scheduled_date }}）。顺延会自动安排不冲突的时间。</span>
+      </div>
+      <button class="primary-button" type="button" :disabled="carrying" @click="carryOver">
+        {{ carrying ? '正在顺延…' : '顺延到今天' }}
+      </button>
     </section>
 
     <section class="panel full-panel">
@@ -150,6 +180,7 @@ async function onDateChange(): Promise<void> {
             :class="{ checked: task.status === '已完成' }"
             type="button"
             :disabled="task.status === '已完成'"
+            :title="task.status === '已完成' ? '已完成；如需重做请使用右侧“重置”' : '完成任务'"
             :aria-label="`完成${task.title}`"
             @click="completing = task"
           >{{ task.status === '已完成' ? '✓' : '' }}</button>

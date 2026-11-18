@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { ApiError, request } from '../api/client'
 import type { Goal } from '../api/types'
 import { notify } from '../stores/toast'
+import { todayISO } from '../utils'
 import ModalShell from './ModalShell.vue'
 
 const emit = defineEmits<{ close: []; saved: [] }>()
@@ -62,6 +63,10 @@ async function save(): Promise<void> {
     notify('请选择考试日期', 'error')
     return
   }
+  if (form.exam_date < todayISO()) {
+    notify('考试日期不能早于今天', 'error')
+    return
+  }
   saving.value = true
   try {
     await request<Goal>('/goals/current', {
@@ -90,7 +95,7 @@ async function save(): Promise<void> {
     <div v-if="loading" class="loading-state">正在读取目标…</div>
     <template v-else>
       <div class="goal-visual"><strong>{{ daysRemaining }}</strong><span>天后考试</span></div>
-      <label>考试日期<input v-model="form.exam_date" type="date" @change="syncDays"></label>
+      <label>考试日期<input v-model="form.exam_date" type="date" :min="todayISO()" @change="syncDays"></label>
       <div class="form-row">
         <label>目标院校<input v-model="form.target_school" maxlength="128" placeholder="例如：某某大学"></label>
         <label>目标专业<input v-model="form.target_major" maxlength="128" placeholder="例如：计算机科学与技术"></label>

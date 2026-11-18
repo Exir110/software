@@ -54,7 +54,11 @@ async function submit(): Promise<void> {
 
 <template>
   <ModalShell title="完成学习任务" overline="Study record" wide @close="emit('close')">
-    <p class="dialog-lead">「{{ task.title }}」完成后会写入学习记录，并按正确率和自评更新掌握度。</p>
+    <p class="dialog-lead">
+      「{{ task.title }}」完成后会写入学习记录。
+      <template v-if="task.knowledge_point_id">并按正确率和自评更新「{{ task.knowledge_point }}」的掌握度。</template>
+      <template v-else>该任务未关联知识点，不会更新掌握度。</template>
+    </p>
     <div class="form-row">
       <label>实际学习分钟<input v-model.number="form.minutes" type="number" min="1" max="720"></label>
       <label>自评掌握（1-5）

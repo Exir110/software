@@ -101,6 +101,7 @@ export interface WrongQuestion {
   status: string
   review_count: number
   next_review_at: string | null
+  due: boolean
   created_at: string
 }
 
@@ -120,6 +121,8 @@ export interface WeeklyPoint {
 export interface Dashboard {
   days_to_exam: number
   study_goal_minutes: number
+  overdue_count: number
+  ai_provider: string
   today_minutes: number
   today_completed: number
   today_total: number
@@ -145,6 +148,9 @@ export interface WeeklyGoal {
   target_minutes: number
   status: GoalStatus
   week_start: string
+  progress: number
+  progress_text: string
+  auto: boolean
 }
 
 export interface PlanWeek {
@@ -162,6 +168,11 @@ export interface PlanWeek {
 export interface Plan {
   exam_date: string | null
   days_remaining: number
+  target_school: string
+  target_major: string
+  target_score: number
+  daily_minutes: number
+  ai_provider: string
   phases: PlanPhase[]
   week: PlanWeek
   insight: string
@@ -174,6 +185,7 @@ export interface PlanRecommendation {
   score: number
   reason: string
   start_time: string
+  duration_minutes: number
 }
 
 export interface PlanResponse {
@@ -182,10 +194,34 @@ export interface PlanResponse {
   provider: string
   applied: boolean
   recommendations: PlanRecommendation[]
+  deferred: PlanRecommendation[]
+  warnings: string[]
 }
 
 export interface PracticeResult {
   knowledge: Knowledge
   delta: number
   message: string
+}
+
+
+export interface StudyRecordItem {
+  id: number
+  task_id: number | null
+  task_title: string | null
+  knowledge_point: string | null
+  subject: string | null
+  minutes: number
+  correct_count: number
+  total_count: number
+  self_rating: number
+  mastery_delta: number | null
+  note: string
+  created_at: string
+}
+
+export interface SummaryResponse {
+  summary: string
+  provider: string
+  generated_at: string
 }

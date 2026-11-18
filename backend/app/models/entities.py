@@ -12,11 +12,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from ..core.clock import now_local
 from ..db.base import Base
-
-
-def now_local() -> datetime:
-    return datetime.now()
 
 
 class User(Base):
@@ -142,6 +139,7 @@ class StudyRecord(Base):
     correct_count: Mapped[int] = mapped_column(Integer, default=0)
     total_count: Mapped[int] = mapped_column(Integer, default=0)
     self_rating: Mapped[int] = mapped_column(Integer, default=3)
+    mastery_delta: Mapped[float | None] = mapped_column(Float, nullable=True)
     note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_local, index=True)
 
@@ -197,3 +195,16 @@ class WeeklyGoal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_local)
 
     user: Mapped["User"] = relationship(back_populates="weekly_goals")
+
+
+
+class PlanSeed(Base):
+    __tablename__ = "plan_seeds"
+    __table_args__ = (UniqueConstraint("user_id", "week_start", name="uq_plan_seed_user_week"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    week_start: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_local)
+
+    user: Mapped["User"] = relationship()

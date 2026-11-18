@@ -4,11 +4,15 @@ from datetime import datetime
 import httpx
 
 from ..core.config import settings
+from ..core.clock import now_local
 from ..models import WrongQuestion
 
 
+def effective_provider() -> str:
+    return "openai" if settings.ai_provider == "openai" and settings.openai_api_key else "local"
+
 async def _chat(system: str, user: str, max_tokens: int = 500) -> str | None:
-    if settings.ai_provider != "openai" or not settings.openai_api_key:
+    if effective_provider() != "openai":
         return None
     try:
         async with httpx.AsyncClient(timeout=25.0) as client:
@@ -97,4 +101,5 @@ async def daily_summary(
 
 
 def now_iso() -> datetime:
-    return datetime.now()
+    return now_local()
+

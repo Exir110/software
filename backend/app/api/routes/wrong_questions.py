@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from ...core.clock import now_local
 from ...db.session import get_db
 from ...models import KnowledgePoint, Subject, User, UserKnowledge, WrongQuestion
 from ...schemas.domain import (
@@ -13,10 +14,13 @@ from ...schemas.domain import (
     WrongQuestionUpdate,
 )
 from ...services.ai import analyze_wrong_question
+from ...services.goals import sync_weekly_goals
 from ..deps import get_current_user
 from ..serializers import wrong_dict
 
 router = APIRouter(prefix="/wrong-questions", tags=["错题本"])
+
+REVIEW_INTERVALS = [1, 3, 7, 15, 30]
 
 
 def _query():
@@ -56,7 +60,11 @@ def create_question(
         point = db.get(KnowledgePoint, payload.knowledge_point_id)
         if point is None or point.subject_id != payload.subject_id:
             raise HTTPException(status_code=400, detail="知识点与科目不匹配")
-    question = WrongQuestion(user_id=user.id, **payload.model_dump())
+    question = WrongQuestion(
+        user_id=user.id,
+        next_review_at=now_local() + timedelta(days=1),
+        **payload.model_dump(),
+    )
     db.add(question)
     db.commit()
     question = _get_question(db, user.id, question.id)
@@ -71,9 +79,15 @@ def update_question(
     db: Session = Depends(get_db),
 ) -> WrongQuestionOut:
     question = _get_question(db, user.id, question_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(question, field, value)
+    if updates.get("status") == "已掌握":
+        question.next_review_at = None
+    elif updates.get("status") == "待复习" and question.next_review_at is None:
+        question.next_review_at = now_local() + timedelta(days=1)
     db.commit()
+    sync_weekly_goals(db, user.id)
     question = _get_question(db, user.id, question_id)
     return WrongQuestionOut(**wrong_dict(question))
 
@@ -98,8 +112,7 @@ async def analyze(
 
     analysis, suggestions, provider = await analyze_wrong_question(question, point_name, mastery)
     question.analysis = analysis
-    question.review_count += 1
-    question.next_review_at = datetime.now() + timedelta(days=3)
+    # 只保存分析内容，不把“分析次数”当成“复习次数”
     db.commit()
     return WrongAnalysisOut(
         question_id=question.id,
@@ -107,6 +120,23 @@ async def analyze(
         suggestions=suggestions,
         provider=provider,
     )
+
+
+@router.post("/{question_id}/review", response_model=WrongQuestionOut)
+def review(
+    question_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> WrongQuestionOut:
+    question = _get_question(db, user.id, question_id)
+    question.review_count += 1
+    days = REVIEW_INTERVALS[min(question.review_count - 1, len(REVIEW_INTERVALS) - 1)]
+    question.next_review_at = now_local() + timedelta(days=days)
+    question.status = "待复习"
+    db.commit()
+    sync_weekly_goals(db, user.id)
+    question = _get_question(db, user.id, question_id)
+    return WrongQuestionOut(**wrong_dict(question))
 
 
 @router.delete("/{question_id}", status_code=status.HTTP_204_NO_CONTENT)

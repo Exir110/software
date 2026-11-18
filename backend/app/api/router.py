@@ -1,7 +1,18 @@
 from fastapi import APIRouter
 
 from ..core.config import settings
-from .routes import ai, auth, dashboard, goals, knowledge, plan, subjects, tasks, wrong_questions
+from .routes import (
+    ai,
+    auth,
+    dashboard,
+    goals,
+    knowledge,
+    plan,
+    records,
+    subjects,
+    tasks,
+    wrong_questions,
+)
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
@@ -13,9 +24,9 @@ api_router.include_router(wrong_questions.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(ai.router)
 api_router.include_router(plan.router)
+api_router.include_router(records.router)
 
 
 @api_router.get("/health", tags=["系统"])
 def health() -> dict:
-    return {"status": "ok", "app": settings.app_name}
-
+    return {"status": "ok", "app": settings.app_name, "ai_provider": settings.ai_provider}

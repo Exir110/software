@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     openai_model: str = "gpt-4o-mini"
     seed_demo: bool = True
+    app_timezone: str = "Asia/Shanghai"
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",
@@ -30,4 +31,5 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
 

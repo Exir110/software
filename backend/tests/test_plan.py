@@ -57,6 +57,7 @@ def test_task_can_change_subject_and_point(
             "title": "换绑知识点任务",
             "subject_id": matrix["subject_id"],
             "knowledge_point_id": matrix["id"],
+            "start_time": "21:30",
         },
     )
     assert created.status_code == 201, created.text
@@ -107,3 +108,5 @@ def test_wrong_question_create_and_delete(
     assert deleted.status_code == 204
     remaining = client.get("/api/wrong-questions", headers=demo_headers).json()
     assert all(item["id"] != question_id for item in remaining)
+
+

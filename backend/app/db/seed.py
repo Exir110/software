@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.security import hash_password
+from ..core.clock import today_local
 from ..models import (
     ExamGoal,
     KnowledgePoint,
@@ -34,7 +35,7 @@ DEMO_DAILY_TASKS: tuple[tuple[str, str, str, str, int, str, str], ...] = (
 
 def _ensure_demo_today(db: Session, user: User) -> None:
     """Demo 用户跨天启动时，补一套当天的任务，避免“今日任务”为空。"""
-    today = date.today()
+    today = today_local()
     existing = db.scalar(
         select(StudyTask.id)
         .where(StudyTask.user_id == user.id, StudyTask.scheduled_date == today)
@@ -44,7 +45,16 @@ def _ensure_demo_today(db: Session, user: User) -> None:
         return
     subjects = {item.name: item for item in db.scalars(select(Subject)).all()}
     points = {item.name: item for item in db.scalars(select(KnowledgePoint)).all()}
+    unfinished_titles = set(
+        db.scalars(
+            select(StudyTask.title).where(
+                StudyTask.user_id == user.id, StudyTask.status != "已完成"
+            )
+        ).all()
+    )
     for title, subject_name, point_name, start_time, duration, priority, note in DEMO_DAILY_TASKS:
+        if title in unfinished_titles:
+            continue
         subject = subjects.get(subject_name)
         point = points.get(point_name)
         if subject is None or point is None:
@@ -72,7 +82,7 @@ def seed_demo(db: Session) -> bool:
         _ensure_demo_today(db, existing_user)
         return False
 
-    today = date.today()
+    today = today_local()
     user = User(
         username="demo",
         display_name="林同学",

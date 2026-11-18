@@ -238,3 +238,59 @@ textarea:focus-visible { outline: 3px solid rgba(238, 119, 105, .25); outline-of
 
 
 
+
+/* ---------- audit fixes ---------- */
+.mobile-nav-backdrop { position: fixed; z-index: 7; inset: 0; background: rgba(30, 38, 48, .28); }
+.title-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.overdue-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 14px 16px; border: 1px solid #f4d9d4; border-radius: 10px; background: #fff7f4; }
+.overdue-banner strong { display: block; color: #bb5d52; font-size: 12px; }
+.overdue-banner span { display: block; margin-top: 4px; color: #a08d88; font-size: 11px; line-height: 1.6; }
+.overdue-banner .primary-button { min-height: 32px; padding: 0 12px; font-size: 11px; white-space: nowrap; }
+.ai-summary-button { display: block; margin-top: 12px; }
+.field-hint { margin: -6px 0 14px; padding: 8px 10px; border-radius: 7px; color: #a47b3a; background: #fff8e8; font-size: 10px; line-height: 1.6; }
+.plan-provider { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+.provider-badge { padding: 4px 7px; border-radius: 5px; color: #6b67ad; background: #eeedff; font-size: 10px; font-weight: 700; }
+.ai-plan-list { display: grid; gap: 2px; margin: 10px 0 4px; }
+.ai-plan-row { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid #f0f2f4; }
+.ai-plan-row:last-child { border-bottom: 0; }
+.plan-time { flex: 0 0 48px; padding-top: 2px; color: var(--coral-deep); font-size: 12px; font-weight: 700; }
+.plan-copy { min-width: 0; flex: 1; }
+.plan-copy strong { display: block; font-size: 12px; }
+.plan-copy small { display: block; margin-top: 4px; color: #9ba2ac; font-size: 10px; line-height: 1.6; }
+.deferred-block { margin-top: 16px; padding: 12px 14px; border: 1px solid #f2e4c8; border-radius: 9px; background: #fffaf0; }
+.deferred-row { padding: 8px 0; border-bottom: 1px dashed #eee2ca; }
+.deferred-row:last-child { border-bottom: 0; }
+.deferred-row strong { display: block; font-size: 11px; color: #7c6a4d; }
+.deferred-row small { display: block; margin-top: 3px; color: #a28f70; font-size: 10px; }
+.warning-list { margin: 14px 0 0; padding: 10px 14px 10px 28px; border-radius: 8px; color: #a06a37; background: #fff8ec; font-size: 11px; line-height: 1.7; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 20px; }
+.modal-actions .primary-button, .modal-actions .outline-button { min-height: 34px; }
+.records-panel { margin-top: 20px; }
+.record-row { display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 9px 0; border-bottom: 1px solid #f0f2f4; }
+.record-row:last-child { border-bottom: 0; }
+.record-main { flex: 1; min-width: 0; }
+.record-main strong { display: block; font-size: 12px; }
+.record-main > span { display: block; margin-top: 4px; color: #9ca3ad; font-size: 10px; }
+.record-main p { margin: 4px 0 0; color: #a8aeb6; font-size: 10px; }
+.record-delta { min-width: 52px; color: #4fa785; font-size: 11px; font-weight: 700; text-align: right; }
+.record-delta.down { color: #c87066; }
+.review-meta { display: block; margin-top: 4px; color: #a0a7af; font-size: 10px; }
+.auto-tag { display: inline-block; margin-left: 5px; padding: 1px 5px; border-radius: 4px; color: #6f6bb0; background: #eeedff; font-size: 9px; font-weight: 700; vertical-align: 1px; }
+.ai-mode-line { margin-top: 8px !important; color: #b3b0cc !important; font-size: 9px !important; }
+@media (max-width: 740px) {
+  .overdue-banner { align-items: flex-start; flex-direction: column; }
+  .overdue-banner .primary-button { align-self: stretch; }
+  .record-row { flex-wrap: wrap; }
+  .record-main { flex: 1 1 100%; }
+  .record-delta { text-align: left; }
+}
+
+.notification-wrap { position: relative; }
+.notification-panel { position: absolute; z-index: 15; top: 40px; right: 0; width: min(280px, 78vw); padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 18px 42px rgba(30, 40, 50, .14); }
+.notification-panel .overline { margin-bottom: 8px; }
+.notification-item { display: block; width: 100%; padding: 9px 8px; border-radius: 7px; text-align: left; background: transparent; }
+.notification-item:hover { background: #f8fafc; }
+.notification-item strong { display: block; color: var(--ink); font-size: 11px; }
+.notification-item span { display: block; margin-top: 3px; color: #9aa2ac; font-size: 10px; }
+
+.notification-backdrop { position: fixed; z-index: 14; inset: 0; background: transparent; }

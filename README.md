@@ -14,7 +14,17 @@
   - 知识点练习录入、错题录入 / 筛选 / 状态流转 / AI 分析
   - 备考目标表单、阶段时间轴、本周目标（可增删勾选）、执行洞察
   - 移除 localStorage 演示数据与所有“只弹提示”的假按钮
-- **M4（待做）**：BKT / 间隔复习规则、真实大模型结构化输出校验、部署与答辩材料
+- **M3.1 质量修复（已完成）**：
+  - 考试日期 / 任务日期 / 时间段校验，禁止过去日期、跨天任务和时间冲突
+  - AI 计划改为“预览 → 应用”：从当前时间开始排程，尊重每日学习时长，超出任务进入 deferred
+  - 掌握度改为题量加权，自评只能小幅修正；低于 60% 正确率不允许上涨
+  - 周目标自动联动练习 / 任务完成；删除后不再自动重建
+  - 逾期任务列表与“一键顺延到今天”，逾期任务也会进入 AI 排程
+  - 错题“分析”和“复习”分离，复习间隔按 1/3/7/15/30 天递增，新增今日到期筛选
+  - 学习记录列表与删除回滚掌握度；知识点可新增
+  - 目标院校 / 专业 / 分数展示到计划页，保存后当前页立即刷新
+  - 时区配置、登录限流、SQLite 轻量迁移、AI provider 明示
+- **M4（待做）**：BKT、真实大模型结构化输出校验、部署与答辩材料
 
 ## 技术栈
 
@@ -51,7 +61,9 @@ AI：OpenAI 兼容接口，默认使用本地规则降级
 
 ## 启动方式
 
-先启动后端（前端所有页面都依赖 API）：
+需要**两个终端**：一个常驻后端，一个常驻前端。不要在前端 `npm run dev` 的同一个终端里再敲后端命令，否则命令不会执行。
+
+### 终端 1：后端（前端所有页面都依赖 API）
 
 ```powershell
 cd E:\software
@@ -60,7 +72,7 @@ cd E:\software
 
 接口文档：http://localhost:8000/docs
 
-再启动前端：
+### 终端 2：前端
 
 ```powershell
 cd E:\software
@@ -95,11 +107,11 @@ python -m venv .venv
 | 模块 | 能力 |
 |---|---|
 | 登录 / 注册 | 注册即创建考试目标与知识点基础状态；登录状态保存在本地 token，刷新不掉线 |
-| 学习总览 | 今日时长、完成率、平均掌握度、连续学习、今日任务、薄弱点推荐、周学习节奏 |
-| 今日任务 | 按日期 / 状态 / 科目筛选；新建、编辑、删除、开始 / 暂停、完成（记录正确率、自评、备注） |
-| 知识追踪 | 掌握度排序、趋势、练习次数；记录练习后按正确率与自评更新掌握度 |
-| 错题本 | 录入、按状态 / 科目筛选、标记掌握、删除；单题 AI 分析与建议；按错误类型自动汇总 |
-| 备考计划 | 根据考试日期自动生成四阶段时间轴；本周目标增删勾选；执行洞察；AI 重排任务 |
+| 学习总览 | 今日时长、完成率、平均掌握度、连续学习、逾期提醒、今日任务、薄弱点推荐、周学习节奏、今日总结 |
+| 今日任务 | 按日期 / 状态 / 科目筛选；新建、编辑、删除、开始 / 暂停、完成（记录正确率、自评、备注）；逾期任务一键顺延 |
+| 知识追踪 | 掌握度排序、趋势、练习次数；新增知识点；记录练习；学习记录查看/删除并回滚掌握度 |
+| 错题本 | 录入、按状态 / 科目 / 今日到期筛选、标记掌握、删除；AI 分析与复习分离；复习间隔递增 |
+| 备考计划 | 阶段时间轴；本周目标自动进度；执行洞察；AI 计划预览/应用（尊重每日时长与当前时间） |
 | 备考目标 | 考试日期、院校、专业、目标分数、每日学习时长 |
 
 ## 核心业务链路
@@ -123,17 +135,21 @@ GET    /api/auth/me
 GET    /api/goals/current | PUT /api/goals/current 备考目标
 GET    /api/subjects                              科目
 GET    /api/tasks?date=YYYY-MM-DD                 当日任务
-POST   /api/tasks | PATCH/DELETE /api/tasks/{id}  任务管理
+POST   /api/tasks | PATCH/DELETE /api/tasks/{id}  任务管理（日期/时间冲突校验）
+GET    /api/tasks/overdue | POST /api/tasks/carry-over 逾期任务 / 顺延
 POST   /api/tasks/{id}/start | /complete          开始 / 完成
-GET    /api/knowledge                             知识点掌握度
+GET    /api/knowledge | POST /api/knowledge       知识点掌握度 / 新增知识点
 POST   /api/knowledge/{id}/practice               练习记录
-GET    /api/wrong-questions                       错题列表
+GET    /api/records | DELETE /api/records/{id}    学习记录 / 删除并回滚
+GET    /api/wrong-questions                       错题列表（含 due 标记）
 POST   /api/wrong-questions | PATCH/DELETE ...    错题管理
-POST   /api/wrong-questions/{id}/analyze          AI 错题分析
-GET    /api/dashboard                             总览聚合
+POST   /api/wrong-questions/{id}/analyze          AI 错题分析（不计入复习次数）
+POST   /api/wrong-questions/{id}/review           完成一次复习（间隔递增）
+GET    /api/dashboard                             总览聚合（含逾期数与 AI 模式）
 GET    /api/plan                                  计划、阶段、周目标与洞察
-POST   /api/plan/goals | PATCH/DELETE ...         周目标管理
-POST   /api/ai/plan | /api/ai/summary             AI 计划 / 每日总结
+POST   /api/plan/goals | PATCH/DELETE ...         周目标管理（自动进度）
+POST   /api/ai/plan?apply=false|true              AI 计划预览 / 应用
+POST   /api/ai/summary                            每日总结
 ```
 
 ## 运行测试
@@ -143,13 +159,14 @@ cd backend
 ..\.venv\Scripts\python.exe -m pytest
 ```
 
-当前覆盖：登录注册、目标与知识点初始化、仪表盘、任务完成与掌握度更新、练习记录、AI 计划、错题分析、计划阶段与周目标、任务换绑科目/知识点。
+当前覆盖 23 个用例：登录注册、目标与知识点初始化、仪表盘、任务完成与掌握度更新、练习记录、AI 计划预览/应用、每日时长上限、错题分析与复习间隔、计划阶段与周目标、周目标自动进度、逾期顺延、学习记录回滚、知识点创建、日期/时间冲突校验。
 
 ## 环境变量
 
 复制 `backend/.env.example` 为 `backend/.env`，至少修改 `SECRET_KEY`（建议 32 个字符以上）。
 
 ```text
+APP_TIMEZONE=Asia/Shanghai      # 服务器“今天”与每日边界按该时区计算
 AI_PROVIDER=local              # local 使用可解释规则，openai 调用兼容接口
 OPENAI_API_KEY=                # 不要提交到 Git
 OPENAI_BASE_URL=https://api.openai.com/v1
@@ -159,5 +176,7 @@ SEED_DEMO=true
 ```
 
 默认数据库位置为 `backend/data/app.db`，不需要额外配置。
+
+生产环境请务必设置随机 `SECRET_KEY` 并把 `SEED_DEMO` 改为 `false`，否则会保留公开的演示账号。
 
 如果 AI 接口调用失败，后端会自动回退到本地规则，不影响任务规划和学习记录。

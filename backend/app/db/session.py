@@ -21,3 +21,14 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def ensure_schema() -> None:
+    """Small forward-compatible migration for SQLite dev databases."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        rows = conn.exec_driver_sql("PRAGMA table_info(study_records)").fetchall()
+        columns = {row[1] for row in rows}
+        if "mastery_delta" not in columns:
+            conn.exec_driver_sql("ALTER TABLE study_records ADD COLUMN mastery_delta FLOAT")

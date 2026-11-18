@@ -6,8 +6,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ...db.session import get_db
+from ...core.clock import today_local
 from ...models import ExamGoal, KnowledgePoint, StudyRecord, StudyTask, User
 from ...schemas.domain import DashboardOut, KnowledgeOut, TaskOut, WeeklyPoint
+from ...services.ai import effective_provider
 from ...services.scheduling import days_remaining
 from ...services.tracking import state_map
 from ..deps import get_current_user
@@ -36,7 +38,7 @@ def _streak_days(db: Session, user_id: int, today: date) -> int:
 def dashboard(
     user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> DashboardOut:
-    today = date.today()
+    today = today_local()
     goal = db.query(ExamGoal).filter(ExamGoal.user_id == user.id).first()
     tasks = db.scalars(
         select(StudyTask)
@@ -92,10 +94,21 @@ def dashboard(
         else 0
     )
 
+    overdue_count = len(
+        db.scalars(
+            select(StudyTask).where(
+                StudyTask.user_id == user.id,
+                StudyTask.scheduled_date < today,
+                StudyTask.status != "已完成",
+            )
+        ).all()
+    )
     completed = sum(1 for task in tasks if task.status == "已完成")
     return DashboardOut(
         days_to_exam=days_remaining(goal),
         study_goal_minutes=goal.daily_minutes if goal else 180,
+        overdue_count=overdue_count,
+        ai_provider=effective_provider(),
         today_minutes=today_minutes,
         today_completed=completed,
         today_total=len(tasks),
@@ -106,3 +119,4 @@ def dashboard(
         weak_points=weak_points,
         weekly=weekly,
     )
+

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { request } from '../api/client'
-import type { Dashboard, Knowledge, PlanResponse, Task, TaskCompleteResult } from '../api/types'
+import type { Dashboard, Knowledge, PlanResponse, SummaryResponse, Task, TaskCompleteResult } from '../api/types'
 import { notify } from '../stores/toast'
 import { fmtShortDate, todayISO, weekdayLabel } from '../utils'
+import AiPlanDialog from '../components/AiPlanDialog.vue'
 import CompleteTaskDialog from '../components/CompleteTaskDialog.vue'
+import SummaryDialog from '../components/SummaryDialog.vue'
 import TaskDialog from '../components/TaskDialog.vue'
 
 const emit = defineEmits<{ navigate: [page: string] }>()
@@ -16,6 +18,10 @@ const loadError = ref('')
 const aiBusy = ref(false)
 const aiMessage = ref('')
 const planGeneratedAt = ref('')
+const planPreview = ref<PlanResponse | null>(null)
+const planApplying = ref(false)
+const summaryBusy = ref(false)
+const summaryResult = ref<SummaryResponse | null>(null)
 const showTaskDialog = ref(false)
 const completing = ref<Task | null>(null)
 
@@ -76,18 +82,47 @@ async function startTask(task: Task): Promise<void> {
   }
 }
 
+const aiProviderLabel = computed(() =>
+  dashboard.value?.ai_provider === 'openai' ? '大模型' : '本地规则',
+)
+
 async function optimizePlan(): Promise<void> {
   aiBusy.value = true
   try {
-    const result = await request<PlanResponse>('/ai/plan', { method: 'POST' })
-    aiMessage.value = result.message
-    planGeneratedAt.value = '刚刚生成'
-    notify('AI 已重新安排今日计划')
-    await load()
+    const result = await request<PlanResponse>('/ai/plan?apply=false', { method: 'POST' })
+    planPreview.value = result
   } catch (error) {
     notify((error as Error).message, 'error')
   } finally {
     aiBusy.value = false
+  }
+}
+
+async function applyPlan(): Promise<void> {
+  if (!planPreview.value) return
+  planApplying.value = true
+  try {
+    const result = await request<PlanResponse>('/ai/plan?apply=true', { method: 'POST' })
+    aiMessage.value = result.message
+    planGeneratedAt.value = '刚刚生成'
+    planPreview.value = null
+    notify('已应用 AI 计划')
+    await load()
+  } catch (error) {
+    notify((error as Error).message, 'error')
+  } finally {
+    planApplying.value = false
+  }
+}
+
+async function generateSummary(): Promise<void> {
+  summaryBusy.value = true
+  try {
+    summaryResult.value = await request<SummaryResponse>('/ai/summary', { method: 'POST' })
+  } catch (error) {
+    notify((error as Error).message, 'error')
+  } finally {
+    summaryBusy.value = false
   }
 }
 
@@ -115,6 +150,14 @@ async function onCompleted(_result: TaskCompleteResult): Promise<void> {
           </p>
         </div>
         <button class="primary-button" type="button" @click="showTaskDialog = true"><span>＋</span> 添加学习任务</button>
+      </section>
+
+      <section v-if="dashboard.overdue_count" class="overdue-banner">
+        <div>
+          <strong>{{ dashboard.overdue_count }} 个任务已逾期</strong>
+          <span>逾期任务不会自动出现在今天，建议顺延后重新安排。</span>
+        </div>
+        <button class="outline-button" type="button" @click="emit('navigate', 'tasks')">去处理</button>
       </section>
 
       <section class="stats-grid">
@@ -192,7 +235,7 @@ async function onCompleted(_result: TaskCompleteResult): Promise<void> {
               <p class="overline">AI 学习教练</p>
               <h2>今天这样学更高效</h2>
             </div>
-            <span class="live-dot">在线</span>
+            <span class="live-dot" title="当前使用的生成方式">{{ aiProviderLabel }}</span>
           </div>
           <div class="ai-message">{{ aiText }}</div>
           <div v-if="weak[0]" class="recommendation">
@@ -204,7 +247,10 @@ async function onCompleted(_result: TaskCompleteResult): Promise<void> {
             <button type="button" title="查看知识追踪" @click="emit('navigate', 'knowledge')">→</button>
           </div>
           <button class="ai-action" type="button" :disabled="aiBusy" @click="optimizePlan">
-            {{ aiBusy ? '正在分析学习数据…' : '让 AI 重新安排今日计划' }} <span>✦</span>
+            {{ aiBusy ? '正在分析学习数据…' : '预览 AI 今日计划' }} <span>✦</span>
+          </button>
+          <button class="text-button ai-summary-button" type="button" :disabled="summaryBusy" @click="generateSummary">
+            {{ summaryBusy ? '正在生成总结…' : '生成今日学习总结' }}
           </button>
           <span class="ai-footnote">
             基于任务、掌握度与剩余备考时间生成{{ planGeneratedAt ? ` · ${planGeneratedAt}` : '' }}
@@ -274,6 +320,18 @@ async function onCompleted(_result: TaskCompleteResult): Promise<void> {
       :task="completing"
       @close="completing = null"
       @completed="onCompleted"
+    />
+    <AiPlanDialog
+      v-if="planPreview"
+      :result="planPreview"
+      :applying="planApplying"
+      @close="planPreview = null"
+      @apply="applyPlan"
+    />
+    <SummaryDialog
+      v-if="summaryResult"
+      :result="summaryResult"
+      @close="summaryResult = null"
     />
   </div>
 </template>
